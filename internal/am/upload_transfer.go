@@ -11,6 +11,7 @@ import (
 	temporal_tools "go.artefactual.dev/tools/temporal"
 	temporalsdk_activity "go.temporal.io/sdk/activity"
 
+	"github.com/artefactual-sdps/enduro/internal/async"
 	"github.com/artefactual-sdps/enduro/internal/sftp"
 )
 
@@ -33,13 +34,13 @@ type UploadTransferActivityResult struct {
 // UploadTransferActivity uploads a transfer via the SFTP client, and sends
 // a periodic Temporal Heartbeat at the given heartRate.
 type UploadTransferActivity struct {
-	client    sftp.Client
+	client    TransferClient
 	heartRate time.Duration
 }
 
 // NewUploadTransferActivity initializes and returns a new
 // UploadTransferActivity.
-func NewUploadTransferActivity(client sftp.Client, heartRate time.Duration) *UploadTransferActivity {
+func NewUploadTransferActivity(client TransferClient, heartRate time.Duration) *UploadTransferActivity {
 	return &UploadTransferActivity{
 		client:    client,
 		heartRate: heartRate,
@@ -94,7 +95,7 @@ func (a *UploadTransferActivity) Execute(
 
 // Heartbeat sends a periodic Temporal heartbeat, which includes the number of
 // bytes uploaded, until the upload is complete, cancelled or returns an error.
-func (a *UploadTransferActivity) Heartbeat(ctx context.Context, upload sftp.AsyncUpload, fileSize int64) error {
+func (a *UploadTransferActivity) Heartbeat(ctx context.Context, upload async.Upload, fileSize int64) error {
 	ticker := time.NewTicker(a.heartRate)
 	defer ticker.Stop()
 

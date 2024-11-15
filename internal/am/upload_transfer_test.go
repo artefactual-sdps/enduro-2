@@ -16,6 +16,8 @@ import (
 	tfs "gotest.tools/v3/fs"
 
 	"github.com/artefactual-sdps/enduro/internal/am"
+	"github.com/artefactual-sdps/enduro/internal/async"
+	async_fake "github.com/artefactual-sdps/enduro/internal/async/fake"
 	"github.com/artefactual-sdps/enduro/internal/sftp"
 	sftp_fake "github.com/artefactual-sdps/enduro/internal/sftp/fake"
 )
@@ -31,7 +33,7 @@ func TestUploadTransferActivity(t *testing.T) {
 	type test struct {
 		name            string
 		params          am.UploadTransferActivityParams
-		mock            func(*gomock.Controller) (sftp.Client, sftp.AsyncUpload)
+		mock            func(*gomock.Controller) (sftp.Client, async.Upload)
 		want            am.UploadTransferActivityResult
 		wantErr         string
 		wantNonRetryErr bool
@@ -42,11 +44,11 @@ func TestUploadTransferActivity(t *testing.T) {
 			params: am.UploadTransferActivityParams{
 				SourcePath: td.Join(filename),
 			},
-			mock: func(ctrl *gomock.Controller) (sftp.Client, sftp.AsyncUpload) {
+			mock: func(ctrl *gomock.Controller) (sftp.Client, async.Upload) {
 				var fp *os.File
 
 				client := sftp_fake.NewMockClient(ctrl)
-				upload := sftp_fake.NewMockAsyncUpload(ctrl)
+				upload := async_fake.NewMockUpload(ctrl)
 
 				client.EXPECT().
 					Upload(
@@ -88,7 +90,7 @@ func TestUploadTransferActivity(t *testing.T) {
 			params: am.UploadTransferActivityParams{
 				SourcePath: td.Join(filename),
 			},
-			mock: func(ctrl *gomock.Controller) (sftp.Client, sftp.AsyncUpload) {
+			mock: func(ctrl *gomock.Controller) (sftp.Client, async.Upload) {
 				var fp *os.File
 
 				client := sftp_fake.NewMockClient(ctrl)
@@ -113,7 +115,7 @@ func TestUploadTransferActivity(t *testing.T) {
 			params: am.UploadTransferActivityParams{
 				SourcePath: td.Join(filename),
 			},
-			mock: func(ctrl *gomock.Controller) (sftp.Client, sftp.AsyncUpload) {
+			mock: func(ctrl *gomock.Controller) (sftp.Client, async.Upload) {
 				var fp *os.File
 
 				client := sftp_fake.NewMockClient(ctrl)

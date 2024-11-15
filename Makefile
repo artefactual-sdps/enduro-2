@@ -128,12 +128,14 @@ gen-goa-json-pretty: $(JQ)
 
 gen-mock: # @HELP Generate mocks.
 gen-mock: $(MOCKGEN)
+	mockgen -typed -destination=./internal/async/fake/mock_async.go -package=fake github.com/artefactual-sdps/enduro/internal/async Upload
+	mockgen -typed -destination=./internal/am/fake/mock_am.go -package=fake github.com/artefactual-sdps/enduro/internal/am TransferClient
 	mockgen -typed -destination=./internal/a3m/fake/mock_transfer_service_client.go -package=fake buf.build/gen/go/artefactual/a3m/grpc/go/a3m/api/transferservice/v1beta1/transferservicev1beta1grpc TransferServiceClient
 	mockgen -typed -destination=./internal/api/auth/fake/mock_ticket_store.go -package=fake github.com/artefactual-sdps/enduro/internal/api/auth TicketStore
 	mockgen -typed -destination=./internal/api/auth/fake/mock_token_verifier.go -package=fake github.com/artefactual-sdps/enduro/internal/api/auth TokenVerifier
 	mockgen -typed -destination=./internal/package_/fake/mock_package_.go -package=fake github.com/artefactual-sdps/enduro/internal/package_ Service
 	mockgen -typed -destination=./internal/persistence/fake/mock_persistence.go -package=fake github.com/artefactual-sdps/enduro/internal/persistence Service
-	mockgen -typed -destination=./internal/sftp/fake/mock_sftp.go -package=fake github.com/artefactual-sdps/enduro/internal/sftp Client,AsyncUpload
+	mockgen -typed -destination=./internal/sftp/fake/mock_sftp.go -package=fake github.com/artefactual-sdps/enduro/internal/sftp Client
 	mockgen -typed -destination=./internal/storage/fake/mock_client.go -package=fake github.com/artefactual-sdps/enduro/internal/storage Client
 	mockgen -typed -destination=./internal/storage/fake/mock_storage.go -package=fake github.com/artefactual-sdps/enduro/internal/storage Service
 	mockgen -typed -destination=./internal/storage/persistence/fake/mock_persistence.go -package=fake github.com/artefactual-sdps/enduro/internal/storage/persistence Storage

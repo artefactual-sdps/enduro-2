@@ -1,9 +1,13 @@
 package sftp
 
-import "sync/atomic"
+import (
+	"sync/atomic"
 
-// AsyncUploadImpl provides an asynchronous upload implementation.
-type AsyncUploadImpl struct {
+	"github.com/artefactual-sdps/enduro/internal/async"
+)
+
+// AsyncUpload provides an asynchronous upload implementation.
+type AsyncUpload struct {
 	conn *connection
 	done chan bool
 	err  chan error
@@ -11,12 +15,12 @@ type AsyncUploadImpl struct {
 	bytes atomic.Int64
 }
 
-var _ AsyncUpload = (*AsyncUploadImpl)(nil)
+var _ async.Upload = (*AsyncUpload)(nil)
 
-// NewAsyncUpload returns an initialized AsyncUploadImpl struct that wraps the
+// NewAsyncUpload returns an initialized AsyncUpload struct that wraps the
 // underlying SFTP connection.
-func NewAsyncUpload(conn *connection) AsyncUploadImpl {
-	return AsyncUploadImpl{
+func NewAsyncUpload(conn *connection) AsyncUpload {
+	return AsyncUpload{
 		conn: conn,
 		done: make(chan bool, 1),
 		err:  make(chan error, 1),
@@ -24,25 +28,25 @@ func NewAsyncUpload(conn *connection) AsyncUploadImpl {
 }
 
 // Bytes returns the current number of bytes uploaded.
-func (u *AsyncUploadImpl) Bytes() int64 {
+func (u *AsyncUpload) Bytes() int64 {
 	return int64(u.bytes.Load())
 }
 
 // Close closes SFTP connection used for the upload. Close must be called
 // when the upload is complete to prevent memory leaks.
-func (u *AsyncUploadImpl) Close() error {
+func (u *AsyncUpload) Close() error {
 	return u.conn.Close()
 }
 
 // Done returns a done channel that receives a true value when the upload is
 // complete.
-func (u *AsyncUploadImpl) Done() chan bool {
+func (u *AsyncUpload) Done() chan bool {
 	return u.done
 }
 
 // Error returns an error channel that receives an error if the upload
 // encounters an error.
-func (u *AsyncUploadImpl) Err() chan error {
+func (u *AsyncUpload) Err() chan error {
 	return u.err
 }
 
@@ -50,7 +54,7 @@ func (u *AsyncUploadImpl) Err() chan error {
 // connection.
 //
 // Write implements the io.Writer interface.
-func (u *AsyncUploadImpl) Write(p []byte) (int, error) {
+func (u *AsyncUpload) Write(p []byte) (int, error) {
 	n := len(p)
 	u.bytes.Add(int64(n))
 	return n, nil

@@ -5,8 +5,6 @@ import (
 	"fmt"
 
 	temporal_tools "go.artefactual.dev/tools/temporal"
-
-	"github.com/artefactual-sdps/enduro/internal/sftp"
 )
 
 const DeleteTransferActivityName = "DeleteTransferActivity"
@@ -16,12 +14,12 @@ type DeleteTransferActivityParams struct {
 }
 
 type DeleteTransferActivity struct {
-	client sftp.Client
+	client TransferClient
 }
 
 type DeleteTransferActivityResult struct{}
 
-func NewDeleteTransferActivity(client sftp.Client) *DeleteTransferActivity {
+func NewDeleteTransferActivity(client TransferClient) *DeleteTransferActivity {
 	return &DeleteTransferActivity{client: client}
 }
 

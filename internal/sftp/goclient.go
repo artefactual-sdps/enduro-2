@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strconv"
 
+	"github.com/artefactual-sdps/enduro/internal/async"
+
 	"github.com/dolmen-go/contextio"
 	"github.com/go-logr/logr"
 	"github.com/pkg/sftp"
@@ -66,7 +68,7 @@ func (c *GoClient) Delete(ctx context.Context, dest string) error {
 // `AsyncUpload.Error()` channel and the upload is terminated. If a ctx
 // cancellation signal is received, the `ctx.Err()` error will be sent to the
 // `AsyncUpload.Error()` channel, and the upload is terminated.
-func (c *GoClient) Upload(ctx context.Context, src io.Reader, dest string) (string, AsyncUpload, error) {
+func (c *GoClient) Upload(ctx context.Context, src io.Reader, dest string) (string, async.Upload, error) {
 	remotePath := sftp.Join(c.cfg.RemoteDir, dest)
 
 	conn, err := c.dial(ctx)
@@ -107,7 +109,7 @@ func (c *GoClient) dial(ctx context.Context) (*connection, error) {
 // remoteCopy copies data from the src reader to a remote file at dest, and
 // updates upload progress asynchronously. Upload status and progress will be
 // sent to the upload struct via the `upload.Done()` and `upload.Error()` channels.
-func remoteCopy(ctx context.Context, upload *AsyncUploadImpl, src io.Reader, dest string) {
+func remoteCopy(ctx context.Context, upload *AsyncUpload, src io.Reader, dest string) {
 	defer upload.Close()
 
 	// Note: Some SFTP servers don't support O_RDWR mode.

@@ -21,9 +21,11 @@ func TestFSTransferClientUpload(t *testing.T) {
 		t.Fatalf("Couldn't open: %s", src)
 	}
 
-	c := am.NewFSTransferClient(srcDir.Path())
-	path, _, err := c.Upload(context.Background(), r, "small.txt")
+	c := am.NewFSTransferClient()
+	err = c.Upload(context.Background(), r, "file://"+dstDir.Join("small.txt"))
 
 	assert.NilError(t, err)
-	assert.Equal(t, path, dstDir.Join("small.txt"))
+	assert.Assert(t, fs.Equal(dstDir.Path(),
+		fs.Expected(t, fs.WithFile("small.txt", "I'm a smol file.")),
+	))
 }

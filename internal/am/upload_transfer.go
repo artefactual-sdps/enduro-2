@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"go.artefactual.dev/tools/temporal"
 	temporal_tools "go.artefactual.dev/tools/temporal"
 	temporalsdk_activity "go.temporal.io/sdk/activity"
 
-	"github.com/artefactual-sdps/enduro/internal/async"
+	"github.com/artefactual-sdps/enduro/internal/progreader"
 	"github.com/artefactual-sdps/enduro/internal/sftp"
 )
 
@@ -20,6 +21,9 @@ const UploadTransferActivityName = "UploadTransferActivity"
 type UploadTransferActivityParams struct {
 	// Local path of the source file.
 	SourcePath string
+
+	// Destination.
+	DestPath string
 }
 
 type UploadTransferActivityResult struct {
@@ -34,16 +38,16 @@ type UploadTransferActivityResult struct {
 // UploadTransferActivity uploads a transfer via the SFTP client, and sends
 // a periodic Temporal Heartbeat at the given heartRate.
 type UploadTransferActivity struct {
-	client    TransferClient
-	heartRate time.Duration
+	sftpclient TransferClient
+	heartRate  time.Duration
 }
 
 // NewUploadTransferActivity initializes and returns a new
 // UploadTransferActivity.
 func NewUploadTransferActivity(client TransferClient, heartRate time.Duration) *UploadTransferActivity {
 	return &UploadTransferActivity{
-		client:    client,
-		heartRate: heartRate,
+		sftpclient: client,
+		heartRate:  heartRate,
 	}
 }
 
@@ -53,7 +57,10 @@ func (a *UploadTransferActivity) Execute(
 	params *UploadTransferActivityParams,
 ) (*UploadTransferActivityResult, error) {
 	logger := temporal_tools.GetLogger(ctx)
-	logger.V(1).Info("Execute UploadTransferActivity", "SourcePath", params.SourcePath)
+	logger.V(1).Info("Execute UploadTransferActivity",
+		"SourcePath", params.SourcePath,
+		"DestPath", params.DestPath,
+	)
 
 	src, err := os.Open(params.SourcePath)
 	if err != nil {
@@ -61,9 +68,19 @@ func (a *UploadTransferActivity) Execute(
 	}
 	defer src.Close()
 
+	var client Uploader
+	switch {
+	case strings.HasPrefix(params.DestPath, "sftp://"):
+		client = a.sftpclient
+	case strings.HasPrefix(params.DestPath, "file://"):
+		client = FSTransferClient{}
+	default:
+		return nil, fmt.Errorf("upload transfer: invalid destination: %s", params.DestPath)
+	}
+
+	pr := progreader.New(src)
 	filename := filepath.Base(params.SourcePath)
-	path, upload, err := a.client.Upload(ctx, src, filename)
-	if err != nil {
+	if err := client.Upload(ctx, pr, filename); err != nil {
 		e := fmt.Errorf("%s: %v", UploadTransferActivityName, err)
 
 		switch err.(type) {
@@ -81,7 +98,7 @@ func (a *UploadTransferActivity) Execute(
 
 	// Block (with a heartbeat) until ctx is cancelled, the upload is done, or
 	// it stops with an error.
-	err = a.Heartbeat(ctx, upload, fi.Size())
+	err = a.Heartbeat(ctx, pr.Bytes(), fi.Size())
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +112,7 @@ func (a *UploadTransferActivity) Execute(
 
 // Heartbeat sends a periodic Temporal heartbeat, which includes the number of
 // bytes uploaded, until the upload is complete, cancelled or returns an error.
-func (a *UploadTransferActivity) Heartbeat(ctx context.Context, upload async.Upload, fileSize int64) error {
+func (a *UploadTransferActivity) Heartbeat(ctx context.Context, written, fileSize int64) error {
 	ticker := time.NewTicker(a.heartRate)
 	defer ticker.Stop()
 
@@ -109,7 +126,7 @@ func (a *UploadTransferActivity) Heartbeat(ctx context.Context, upload async.Upl
 			return nil
 		case <-ticker.C:
 			temporalsdk_activity.RecordHeartbeat(ctx,
-				fmt.Sprintf("Uploaded %d bytes of %d.", upload.Bytes(), fileSize),
+				fmt.Sprintf("Uploaded %d bytes of %d.", written, fileSize),
 			)
 		}
 	}

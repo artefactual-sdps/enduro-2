@@ -4,7 +4,13 @@ import PackageReviewAlert from "@/components/PackageReviewAlert.vue";
 import type { EnduroPackagePreservationTask } from "@/openapi-generator";
 import StatusBadge from "@/components/StatusBadge.vue";
 import { useAuthStore } from "@/stores/auth";
-import { ref, toRefs } from "vue";
+import { onMounted, ref, toRefs } from "vue";
+
+import IconChevronUp from "~icons/bi/chevron-up";
+
+type Card = EnduroPackagePreservationTask & { open: boolean; more: string };
+
+const cards = ref<Card[]>([]);
 
 const authStore = useAuthStore();
 
@@ -15,11 +21,30 @@ const props = defineProps<{
 
 const { action, index } = toRefs(props);
 
+onMounted(() => {
+  if (props.action.tasks) {
+    for (const task of props.action.tasks.reverse()) {
+      let card = <Card>task;
+      if (card.note && card.note.includes("\n")) {
+        const lines = card.note.split("\n");
+        card.note = lines[0];
+        card.more = lines.slice(1).join("\n");
+      }
+      cards.value.push(card);
+    }
+  }
+});
+
 let expandCounter = ref<number>(0);
 
-function isComplete(task: EnduroPackagePreservationTask) {
+const isComplete = (task: EnduroPackagePreservationTask) => {
   return task.status == "done" || task.status == "error";
-}
+};
+
+const toggleCard = (card: Card, ev: Event) => {
+  card.open = !card.open;
+  ev.preventDefault();
+};
 </script>
 
 <template>
@@ -67,18 +92,14 @@ function isComplete(task: EnduroPackagePreservationTask) {
           v-model:expandCounter="expandCounter"
           v-if="authStore.checkAttributes(['package:review'])"
         />
-        <div
-          v-for="(task, index) in action.tasks.slice().reverse()"
-          :key="action.id"
-          class="card"
-        >
+        <div v-for="(item, index) in cards" :key="action.id" class="mb-2 card">
           <div class="card-body">
             <div class="d-flex flex-row align-start gap-3">
               <div class="fd-flex">
                 <span
                   class="fs-6 badge rounded-pill border border-primary text-primary"
                 >
-                  {{ action.tasks.length - index }}
+                  {{ cards.length - index }}
                 </span>
               </div>
               <div
@@ -86,37 +107,53 @@ function isComplete(task: EnduroPackagePreservationTask) {
               >
                 <div class="d-flex flex-wrap pt-1">
                   <div class="me-auto text-truncate fw-bold">
-                    {{ task.name }}
+                    {{ item.name }}
                   </div>
                   <div class="me-3">
                     <span
                       v-if="
-                        !isComplete(task) &&
-                        $filters.formatDateTime(task.startedAt)
+                        !isComplete(item) &&
+                        $filters.formatDateTime(item.startedAt)
                       "
                     >
                       Started:
-                      {{ $filters.formatDateTime(task.startedAt) }}
+                      {{ $filters.formatDateTime(item.startedAt) }}
                     </span>
                     <span
                       v-if="
-                        isComplete(task) &&
-                        $filters.formatDateTime(task.completedAt)
+                        isComplete(item) &&
+                        $filters.formatDateTime(item.completedAt)
                       "
                     >
                       Completed:
-                      {{ $filters.formatDateTime(task.completedAt) }}
+                      {{ $filters.formatDateTime(item.completedAt) }}
                     </span>
                   </div>
                 </div>
                 <div class="d-flex flex-row gap-4">
                   <div class="flex-grow-1 line-break">
-                    {{ task.note }}
+                    {{ item.note }}
+                    <span v-if="item.open" :id="'note-' + index + '-more'"
+                      ><br />{{ item.more }}</span
+                    >
                   </div>
                 </div>
               </div>
-              <div class="d-flex pt-1">
-                <StatusBadge :status="task.status" />
+              <div class="d-flex flex-column pt-1">
+                <div>
+                  <StatusBadge :status="item.status" />
+                </div>
+                <div class="align-self-end">
+                  <a
+                    v-if="item.more"
+                    :href="'#note-' + index + '-more'"
+                    @click="toggleCard(item, $event)"
+                    aria-expanded="false"
+                    role="button"
+                  >
+                    <IconChevronUp />
+                  </a>
+                </div>
               </div>
             </div>
           </div>

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
 	"strconv"
 	"time"
 
@@ -13,11 +14,11 @@ import (
 )
 
 const (
-	// How many records we want to generate.
-	datasetSize = 105
+	// defaultSize is the default number of records to generate.
+	defaultSize = 1000
 
-	// Size of each batch that we write to the CSV.
-	batchSize = 10
+	// batchSize is the number of rows to insert with a single insert query.
+	batchSize = 100
 )
 
 type database interface {
@@ -30,6 +31,19 @@ type database interface {
 type Config struct{}
 
 func main() {
+	args := os.Args
+
+	n := defaultSize
+	if len(args) > 1 {
+		i, err := strconv.Atoi(args[1])
+		if err != nil {
+			usage()
+			fmt.Println("Error: first argument must be a number")
+			os.Exit(1)
+		}
+		n = i
+	}
+
 	db := &mysqlDB{
 		cfg: mysql.Config{
 			User:      "enduro",
@@ -42,12 +56,25 @@ func main() {
 	}
 	c := newCmd(Config{}, db)
 
-	out, err := c.run()
+	out, err := c.run(n)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	fmt.Println(out)
+}
+
+func usage() {
+	fmt.Printf(`
+Generates random package data for testing.
+
+USAGE: go run main.go [COUNT]
+
+COUNT - Number of packages to be created (default: %d)
+
+`,
+		defaultSize,
+	)
 }
 
 type pkg struct {
@@ -87,7 +114,7 @@ func newCmd(cfg Config, db database) *cmd {
 	return &cmd{cfg: cfg, db: db}
 }
 
-func (c *cmd) run() (string, error) {
+func (c *cmd) run(n int) (string, error) {
 	if err := c.db.connect(); err != nil {
 		return "", fmt.Errorf("DB connect: %v", err)
 	}
@@ -97,8 +124,8 @@ func (c *cmd) run() (string, error) {
 	}
 
 	// Generate packages
-	pkgs := make([]pkg, datasetSize)
-	for i := range datasetSize {
+	pkgs := make([]pkg, n)
+	for i := range n {
 		pkgs[i] = gen(i + 1)
 	}
 
@@ -107,7 +134,7 @@ func (c *cmd) run() (string, error) {
 		return "", fmt.Errorf("insert packages: %v", err)
 	}
 
-	return fmt.Sprintf("%d packages inserted!\n", count+1), nil
+	return fmt.Sprintf("%d packages inserted!\n", count), nil
 }
 
 type mysqlDB struct {

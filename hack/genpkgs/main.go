@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -26,6 +27,8 @@ type database interface {
 	init() error
 	batchInsertPkgs([]pkg) (int, error)
 	insertPkgs([]pkg) (int, error)
+	getPackages(ctx context.Context, limit, cursor int) ([]pkg, error)
+	insertActions(context.Context, []pkg) error
 }
 
 type Config struct{}
@@ -78,7 +81,7 @@ COUNT - Number of packages to be created (default: %d)
 }
 
 type pkg struct {
-	ID          string
+	ID          int
 	Name        string
 	WorkflowID  string
 	RunID       uuid.UUID
@@ -115,6 +118,8 @@ func newCmd(cfg Config, db database) *cmd {
 }
 
 func (c *cmd) run(n int) (string, error) {
+	var cursor int
+
 	if err := c.db.connect(); err != nil {
 		return "", fmt.Errorf("DB connect: %v", err)
 	}
@@ -132,6 +137,27 @@ func (c *cmd) run(n int) (string, error) {
 	count, err := c.db.batchInsertPkgs(pkgs)
 	if err != nil {
 		return "", fmt.Errorf("insert packages: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	for {
+		pkgs, err := c.db.getPackages(ctx, batchSize, cursor)
+		if err != nil {
+			return "", err
+		}
+
+		if err = c.db.insertActions(ctx, pkgs); err != nil {
+			return "", err
+		}
+
+		if len(pkgs) < batchSize {
+			break
+		}
+
+		lastPkg := pkgs[len(pkgs)-1]
+		cursor = lastPkg.ID
 	}
 
 	return fmt.Sprintf("%d packages inserted!\n", count), nil
@@ -196,7 +222,7 @@ func (d *mysqlDB) insertPkgs(pkgs []pkg) (int, error) {
 	t := "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?),"
 
 	for _, p := range pkgs {
-		if p.ID == "" {
+		if p.ID == 0 {
 			break
 		}
 
@@ -221,10 +247,80 @@ func (d *mysqlDB) insertPkgs(pkgs []pkg) (int, error) {
 	return int(count), nil
 }
 
+func (d *mysqlDB) getPackages(ctx context.Context, limit, cursor int) ([]pkg, error) {
+	var res []pkg
+	args := []any{}
+
+	q := "SELECT id FROM package"
+	if cursor > 0 {
+		q += " WHERE id > ?"
+		args = append(args, cursor)
+	}
+
+	q += " LIMIT ?"
+	args = append(args, limit)
+
+	r, err := d.conn.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("get packages: %v", err)
+	}
+	defer r.Close()
+
+	for r.Next() {
+		var p pkg
+		if err := r.Scan(&p.ID); err != nil {
+			return nil, fmt.Errorf("set package ID: %v", err)
+		}
+		res = append(res, p)
+	}
+
+	return res, nil
+}
+
+func (d *mysqlDB) insertActions(ctx context.Context, pkgs []pkg) error {
+	var args []any
+
+	if len(pkgs) == 0 {
+		return nil
+	}
+
+	q := `
+INSERT INTO preservation_action (
+	workflow_id,
+	type,
+	status,
+	started_at,
+	completed_at,
+	package_id
+) VALUES`
+
+	for _, p := range pkgs {
+		args = append(args,
+			fmt.Sprintf("processing-workflow-%s", id()), // workflow_id.
+			1, // type: "Create AIP".
+			2, // status: "Done".
+			time.Date(2019, 11, 21, 17, 36, 10, 0, time.UTC), // started_at.
+			time.Date(2019, 11, 21, 17, 37, 8, 0, time.UTC),  // completed_at.
+			p.ID,
+		)
+		q += " (?, ?, ?, ?, ?, ?),"
+	}
+
+	// Replace final comma with a semicolon.
+	q = strings.TrimSuffix(q, ",") + ";"
+
+	_, err := d.conn.ExecContext(ctx, q, args...)
+	if err != nil {
+		return fmt.Errorf("insert preservation actions: %v", err)
+	}
+
+	return nil
+}
+
 func gen(i int) pkg {
 	const doneStatus string = "2"
 	return pkg{
-		ID:          strconv.Itoa(i),
+		ID:          i,
 		Name:        fmt.Sprintf("DPJ-SIP-%s.tar", id()),
 		WorkflowID:  fmt.Sprintf("processing-workflow-%s", id()),
 		RunID:       uuid.New(),

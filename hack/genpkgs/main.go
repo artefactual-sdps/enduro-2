@@ -28,7 +28,7 @@ type database interface {
 	batchInsertPkgs([]pkg) (int, error)
 	insertPkgs([]pkg) (int, error)
 	getPackages(ctx context.Context, limit, cursor int) ([]pkg, error)
-	insertActions(context.Context, []pkg) error
+	insertActions(context.Context, []pkg) ([]int, error)
 }
 
 type Config struct{}
@@ -142,13 +142,15 @@ func (c *cmd) run(n int) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
+	// Add preservation actions and tasks.
 	for {
 		pkgs, err := c.db.getPackages(ctx, batchSize, cursor)
 		if err != nil {
 			return "", err
 		}
 
-		if err = c.db.insertActions(ctx, pkgs); err != nil {
+		_, err = c.db.insertActions(ctx, pkgs)
+		if err != nil {
 			return "", err
 		}
 
@@ -277,11 +279,13 @@ func (d *mysqlDB) getPackages(ctx context.Context, limit, cursor int) ([]pkg, er
 	return res, nil
 }
 
-func (d *mysqlDB) insertActions(ctx context.Context, pkgs []pkg) error {
+func (d *mysqlDB) insertActions(ctx context.Context, pkgs []pkg) ([]int, error) {
 	var args []any
 
+	pkgIDs := make([]int, len(pkgs))
+
 	if len(pkgs) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	q := `
@@ -294,7 +298,7 @@ INSERT INTO preservation_action (
 	package_id
 ) VALUES`
 
-	for _, p := range pkgs {
+	for i, p := range pkgs {
 		args = append(args,
 			fmt.Sprintf("processing-workflow-%s", id()), // workflow_id.
 			1, // type: "Create AIP".
@@ -304,6 +308,7 @@ INSERT INTO preservation_action (
 			p.ID,
 		)
 		q += " (?, ?, ?, ?, ?, ?),"
+		pkgIDs[i] = p.ID
 	}
 
 	// Replace final comma with a semicolon.
@@ -311,10 +316,31 @@ INSERT INTO preservation_action (
 
 	_, err := d.conn.ExecContext(ctx, q, args...)
 	if err != nil {
-		return fmt.Errorf("insert preservation actions: %v", err)
+		return nil, fmt.Errorf("insert preservation actions: %v", err)
 	}
 
-	return nil
+	// Return inserted actions.
+	args = []any{}
+	q = "SELECT FROM preservation_action WHERE package_id IN ("
+	for _, id := range pkgIDs {
+		q += "?,"
+		args = append(args, id)
+	}
+	q += q[0:len(q)-1] + ");"
+
+	r, err := d.conn.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("select preservation actions: %v", err)
+	}
+
+	var ids []int
+	for r.Next() {
+		var id int
+		r.Scan(&id)
+		ids = append(ids, id)
+	}
+
+	return ids, nil
 }
 
 func gen(i int) pkg {

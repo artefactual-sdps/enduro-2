@@ -7,7 +7,9 @@ import StatusBadge from "@/components/StatusBadge.vue";
 import UUID from "@/components/UUID.vue";
 import { useAuthStore } from "@/stores/auth";
 import { usePackageStore } from "@/stores/package";
-import { computed, ref } from "vue";
+import { computed } from "vue";
+import IconBoxArrowUpRight from "~icons/bi/box-arrow-up-right";
+import IconInfoStandardSolid from "~icons/clarity/info-standard-solid";
 
 const authStore = useAuthStore();
 const packageStore = usePackageStore();
@@ -68,7 +70,39 @@ const createAipWorkflow = computed(
 
     <div v-if="authStore.checkAttributes(['package:listActions'])">
       <div class="d-flex">
-        <h2 class="mb-0">Preservation actions</h2>
+        <h2 class="mb-0">
+          Preservation actions
+          <a
+            data-bs-toggle="collapse"
+            href="#presActionInfo"
+            role="button"
+            aria-expanded="false"
+            aria-controls="presActionInfo"
+            ><IconInfoStandardSolid style="font-size: 0.6em" aria-hidden="true"
+          /></a>
+        </h2>
+      </div>
+      <div class="collapse" id="presActionInfo">
+        <div class="card card-body flex flex-column bg-light">
+          <div>
+            <p>
+              A preservation action is a <strong>workflow</strong> composed of
+              one or more <strong>tasks</strong> performed on a package to
+              support preservation.
+            </p>
+            <p>
+              Click on a preservation action listed below to expand it and see
+              more information on individual tasks run as part of the workflow.
+            </p>
+          </div>
+          <div class="align-self-end">
+            <a
+              href="https://github.com/artefactual-sdps/enduro/blob/main/docs/src/user-manual/usage.md#view-tasks-in-enduro"
+              target="_new"
+              >Learn more <IconBoxArrowUpRight
+            /></a>
+          </div>
+        </div>
       </div>
 
       <hr />
